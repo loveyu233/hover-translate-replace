@@ -24,18 +24,18 @@ function activate(context) {
         return provideTranslatedHover(document, position, token);
       },
     }),
-    vscode.commands.registerCommand("goHoverTranslate.clearCache", async () => {
+    vscode.commands.registerCommand("hoverTranslateReplace.clearCache", async () => {
       translationCache.clear();
       await flushPersistentCache(true);
-      vscode.window.showInformationMessage("Go 悬浮翻译缓存已清空。");
+      vscode.window.showInformationMessage("悬浮翻译缓存已清空。");
     }),
-    vscode.commands.registerCommand("goHoverTranslate.toggleOriginal", async (payload) => {
+    vscode.commands.registerCommand("hoverTranslateReplace.toggleOriginal", async (payload) => {
       await toggleOriginal(payload);
     }),
-    vscode.commands.registerCommand("goHoverTranslate.replaceSelectionBidirectional", async () => {
+    vscode.commands.registerCommand("hoverTranslateReplace.replaceSelectionBidirectional", async () => {
       await replaceSelectionBidirectional();
     }),
-    vscode.commands.registerCommand("goHoverTranslate.replaceSelectionAsPascalCase", async () => {
+    vscode.commands.registerCommand("hoverTranslateReplace.replaceSelectionAsPascalCase", async () => {
       await replaceSelectionAsPascalCase();
     })
   );
@@ -65,7 +65,7 @@ async function provideTranslatedHover(document, position, token) {
 
   const markdown = new vscode.MarkdownString();
   markdown.isTrusted = {
-    enabledCommands: ["goHoverTranslate.toggleOriginal"],
+    enabledCommands: ["hoverTranslateReplace.toggleOriginal"],
   };
   markdown.supportHtml = false;
 
@@ -95,7 +95,7 @@ async function provideTranslatedHover(document, position, token) {
 }
 
 function getConfig() {
-  const config = vscode.workspace.getConfiguration("goHoverTranslate");
+  const config = vscode.workspace.getConfiguration("hoverTranslateReplace");
   return {
     enabled: config.get("enabled", true),
     provider: config.get("provider", "google-free"),
@@ -277,7 +277,7 @@ function buildHoverKey(uri, position) {
 
 function buildToggleCommandUri(payload) {
   const encoded = encodeURIComponent(JSON.stringify([payload]));
-  return `command:goHoverTranslate.toggleOriginal?${encoded}`;
+  return `command:hoverTranslateReplace.toggleOriginal?${encoded}`;
 }
 
 async function toggleOriginal(payload) {
@@ -551,7 +551,7 @@ async function translateWithGoogleFree(text, config, overrides = {}) {
 
 async function translateWithOpenAICompatible(text, config, overrides = {}) {
   if (!config.openaiApiKey) {
-    throw new Error("未配置 goHoverTranslate.openaiApiKey。");
+    throw new Error("未配置 hoverTranslateReplace.openaiApiKey。");
   }
 
   const url = new URL("/chat/completions", ensureTrailingSlash(config.openaiBaseUrl));
@@ -597,7 +597,7 @@ async function translateWithOpenAICompatible(text, config, overrides = {}) {
 
 async function translateWithTencentCloud(text, config, overrides = {}) {
   if (!config.tencentSecretId || !config.tencentSecretKey) {
-    throw new Error("未配置 goHoverTranslate.tencentSecretId 或 goHoverTranslate.tencentSecretKey。");
+    throw new Error("未配置 hoverTranslateReplace.tencentSecretId 或 hoverTranslateReplace.tencentSecretKey。");
   }
 
   const endpoint = new URL(config.tencentEndpoint);
@@ -800,7 +800,7 @@ async function ensurePersistentCacheLoaded() {
       if (error && error.code === "ENOENT") {
         return;
       }
-      console.warn("[go-hover-translate] 加载持久化缓存失败:", error);
+      console.warn("[hover-translate-replace] 加载持久化缓存失败:", error);
     }
   })();
 
@@ -886,7 +886,7 @@ async function flushPersistentCache(force) {
         await fs.mkdir(path.dirname(persistentCache.filePath), { recursive: true });
         await fs.writeFile(persistentCache.filePath, JSON.stringify(payload, null, 2), "utf8");
       } catch (error) {
-        console.warn("[go-hover-translate] 写入持久化缓存失败:", error);
+        console.warn("[hover-translate-replace] 写入持久化缓存失败:", error);
       }
     });
 
