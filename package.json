@@ -29,6 +29,10 @@
       {
         "command": "goHoverTranslate.replaceSelectionBidirectional",
         "title": "中英互译替换"
+      },
+      {
+        "command": "goHoverTranslate.replaceSelectionAsPascalCase",
+        "title": "替换为 PascalCase"
       }
     ],
     "menus": {
@@ -37,6 +41,11 @@
           "command": "goHoverTranslate.replaceSelectionBidirectional",
           "when": "editorHasSelection",
           "group": "1_modification@99"
+        },
+        {
+          "command": "goHoverTranslate.replaceSelectionAsPascalCase",
+          "when": "editorHasSelection",
+          "group": "1_modification@100"
         }
       ]
     },

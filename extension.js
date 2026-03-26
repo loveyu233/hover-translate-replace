@@ -34,6 +34,9 @@ function activate(context) {
     }),
     vscode.commands.registerCommand("goHoverTranslate.replaceSelectionBidirectional", async () => {
       await replaceSelectionBidirectional();
+    }),
+    vscode.commands.registerCommand("goHoverTranslate.replaceSelectionAsPascalCase", async () => {
+      await replaceSelectionAsPascalCase();
     })
   );
 }
@@ -365,6 +368,65 @@ async function replaceSelectionBidirectional() {
   }
 }
 
+async function replaceSelectionAsPascalCase() {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    return;
+  }
+
+  const selection = editor.selection;
+  if (!selection || selection.isEmpty) {
+    vscode.window.showInformationMessage("请先选中一段文本。");
+    return;
+  }
+
+  const selectedText = editor.document.getText(selection).trim();
+  if (!selectedText) {
+    vscode.window.showInformationMessage("选中文本为空，无法替换。");
+    return;
+  }
+
+  const config = getConfig();
+  const hasCjk = /[\u3400-\u9fff]/.test(selectedText);
+  let baseText = selectedText;
+
+  if (hasCjk) {
+    try {
+      const translated = await translateWithCache(
+        selectedText,
+        config,
+        undefined,
+        {
+          sourceLanguage: "zh",
+          targetLanguage: "en",
+        }
+      );
+      if (!translated || !translated.trim()) {
+        vscode.window.showInformationMessage("没有得到可用的英文结果。");
+        return;
+      }
+      baseText = translated.trim();
+    } catch (error) {
+      vscode.window.showErrorMessage(`替换失败: ${error.message}`);
+      return;
+    }
+  }
+
+  const identifier = toPascalCaseIdentifier(baseText);
+  if (!identifier) {
+    vscode.window.showInformationMessage("无法生成有效的 PascalCase 名称。");
+    return;
+  }
+
+  const applied = await editor.edit((editBuilder) => {
+    editBuilder.replace(selection, identifier);
+  });
+
+  if (!applied) {
+    vscode.window.showErrorMessage("替换失败，编辑器未能应用修改。");
+  }
+}
+
 function detectBidirectionalReplacement(text) {
   const normalized = String(text || "").trim();
   const hasCjk = /[\u3400-\u9fff]/.test(normalized);
@@ -385,6 +447,37 @@ function detectBidirectionalReplacement(text) {
   }
 
   return null;
+}
+
+function toPascalCaseIdentifier(text) {
+  const normalized = String(text || "")
+    .replace(/`[^`\n]+`/g, " ")
+    .replace(/\[[^\]\n]+\]\([^)]+\)/g, " ")
+    .replace(/[_\-.]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/[^A-Za-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  const parts = normalized
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.toLowerCase())
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1));
+
+  let result = parts.join("");
+  if (!result) {
+    return "";
+  }
+  if (/^[0-9]/.test(result)) {
+    result = `Value${result}`;
+  }
+  return result;
 }
 
 async function translateWithCache(text, config, token, overrides = {}) {

@@ -1,11 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-03-26T07:18:48.978Z",
+  "updatedAt": "2026-03-26T07:23:09.227Z",
   "entries": [
-    [
-      "{\"provider\":\"tencent-cloud\",\"targetLanguage\":\"zh-CN\",\"sourceLanguage\":\"en\",\"text\":\"Left must be smaller than right\"}",
-      "左必须小于右"
-    ],
     [
       "{\"provider\":\"tencent-cloud\",\"targetLanguage\":\"en\",\"sourceLanguage\":\"zh\",\"text\":\"左必须小于右\"}",
       "Left must be smaller than right"
@@ -13,6 +9,14 @@
     [
       "{\"provider\":\"tencent-cloud\",\"targetLanguage\":\"zh-CN\",\"sourceLanguage\":null,\"text\":\"NewSource returns a new pseudo-random [Source] seeded with the given value.\\nUnlike the default [Source] used by top-level functions, this source is not\\nsafe for concurrent use by multiple goroutines.\\nThe returned [Source] implements [Source64].\"}",
       "NewSource返回用给定值种子的新伪随机[Source]。\n与顶级函数使用的默认[Source]不同，此源不是\n可供多个goroutine同时使用。\n返回的[Source]实现[Source 64]。"
+    ],
+    [
+      "{\"provider\":\"tencent-cloud\",\"targetLanguage\":\"zh-CN\",\"sourceLanguage\":\"en\",\"text\":\"Left must be smaller than right\"}",
+      "左必须小于右"
+    ],
+    [
+      "{\"provider\":\"tencent-cloud\",\"targetLanguage\":\"zh-CN\",\"sourceLanguage\":null,\"text\":\"UnixNano returns t as a Unix time, the number of nanoseconds elapsed\\nsince January 1, 1970 UTC. The result is undefined if the Unix time\\nin nanoseconds cannot be represented by an int64 (a date before the year\\n1678 or after 2262). Note that this means the result of calling UnixNano\\non the zero Time is undefined. The result does not depend on the\\nlocation associated with t.\"}",
+      "UnixNano返回t作为Unix时间，即经过的微秒数\n自1970年1月1日协调时起。如果是Unix时间，则结果未定义\n单位为微秒不能用int 64（年前的日期）表示\n1678年或2262年之后）。请注意，这意味着调用UnixNano的结果\n在零时时间未定义。结果不取决于\n与t相关的位置。"
     ]
   ]
 }

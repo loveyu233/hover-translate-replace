@@ -100,6 +100,7 @@ ln -s /Users/huangzhenyu/Other/vscode_extensions/go-hover-translate-replace \
 - `清空翻译缓存`
 - `切换原文显示`
 - `中英互译替换`
+- `替换为 PascalCase`
 
 ## 右键替换
 
@@ -111,6 +112,20 @@ ln -s /Users/huangzhenyu/Other/vscode_extensions/go-hover-translate-replace \
 - 选中英文：替换为中文
 
 这项功能会复用当前配置的翻译源和缓存。
+
+## PascalCase 替换
+
+右键菜单还提供 `替换为 PascalCase`。
+
+规则是：
+
+- 选中中文：先翻译成英文，再转成 `PascalCase`
+- 选中英文：直接转成 `PascalCase`
+
+例如：
+
+- `获取文章列表` -> `GetArticleList`
+- `get article list` -> `GetArticleList`
 
 ## 腾讯云配置示例
 
