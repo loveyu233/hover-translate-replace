@@ -490,15 +490,7 @@ async function replaceSelectionBidirectional() {
   const config = getConfig();
   let translated;
   try {
-    translated = await translateWithCache(
-      selectedText,
-      config,
-      undefined,
-      {
-        sourceLanguage: direction.sourceLanguage,
-        targetLanguage: direction.targetLanguage,
-      }
-    );
+    translated = await translateForReplacementWithRetry(selectedText, config, direction);
   } catch (error) {
     vscode.window.showErrorMessage(`替换失败: ${error.message}`);
     return;
@@ -520,6 +512,38 @@ async function replaceSelectionBidirectional() {
   if (!applied) {
     vscode.window.showErrorMessage("替换失败，编辑器未能应用修改。");
   }
+}
+
+async function translateForReplacementWithRetry(text, config, direction) {
+  const primaryOverrides = {
+    sourceLanguage: direction.sourceLanguage,
+    targetLanguage: direction.targetLanguage,
+  };
+  const primaryTranslated = await translateWithCache(text, config, undefined, primaryOverrides);
+  if (isUsefulReplacement(primaryTranslated, text)) {
+    return primaryTranslated;
+  }
+
+  const fallbackOverrides = {
+    sourceLanguage: "auto",
+    targetLanguage: direction.targetLanguage,
+  };
+  if (fallbackOverrides.sourceLanguage === primaryOverrides.sourceLanguage) {
+    return primaryTranslated;
+  }
+
+  const fallbackTranslated = await translateWithCache(text, config, undefined, fallbackOverrides);
+  return isUsefulReplacement(fallbackTranslated, text) ? fallbackTranslated : fallbackTranslated || primaryTranslated;
+}
+
+function isUsefulReplacement(translated, original) {
+  if (!translated || !String(translated).trim()) {
+    return false;
+  }
+
+  const normalizedTranslated = String(translated).trim();
+  const normalizedOriginal = String(original).trim();
+  return normalizedTranslated.toLowerCase() !== normalizedOriginal.toLowerCase();
 }
 
 async function replaceSelectionAsPascalCase() {
@@ -546,15 +570,10 @@ async function replaceSelectionAsPascalCase() {
 
   if (hasCjk) {
     try {
-      const translated = await translateWithCache(
-        selectedText,
-        config,
-        undefined,
-        {
-          sourceLanguage: "zh",
-          targetLanguage: "en",
-        }
-      );
+      const translated = await translateForReplacementWithRetry(selectedText, config, {
+        sourceLanguage: "zh",
+        targetLanguage: "en",
+      });
       if (!translated || !translated.trim()) {
         vscode.window.showInformationMessage("没有得到可用的英文结果。");
         return;
