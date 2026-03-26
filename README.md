@@ -101,6 +101,16 @@ ln -s <扩展目录> ~/.vscode/extensions/local.hover-translate-replace-0.0.1
 - `中英互译替换`
 - `替换为大驼峰`
 
+## 默认快捷键
+
+- `中英互译替换`：`Ctrl+Alt+R`，macOS 为 `Cmd+Alt+R`
+- `替换为大驼峰`：`Ctrl+Alt+P`，macOS 为 `Cmd+Alt+P`
+
+如果你想改成自己的快捷键，请在 VS Code 的“键盘快捷方式”里搜索这些命令 ID：
+
+- `hoverTranslateReplace.replaceSelectionBidirectional`
+- `hoverTranslateReplace.replaceSelectionAsPascalCase`
+
 ## 右键替换
 
 在编辑器里双击或手动选中一段文本后，右键可以看到 `中英互译替换`。

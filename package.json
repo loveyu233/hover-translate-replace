@@ -59,6 +59,20 @@
         "title": "替换为大驼峰"
       }
     ],
+    "keybindings": [
+      {
+        "command": "hoverTranslateReplace.replaceSelectionBidirectional",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "hoverTranslateReplace.replaceSelectionAsPascalCase",
+        "key": "ctrl+alt+p",
+        "mac": "cmd+alt+p",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ],
     "menus": {
       "editor/context": [
         {
