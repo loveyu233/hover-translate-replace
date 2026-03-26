@@ -1,0 +1,8 @@
+.git/**
+.gitignore
+.cache/**
+*.vsix
+*.log
+coverage.*
+profile.cov
+.DS_Store

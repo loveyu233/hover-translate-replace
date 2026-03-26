@@ -3,8 +3,25 @@
   "displayName": "Hover Translate Replace",
   "description": "为悬浮提示补充翻译结果，并提供常用文本替换能力。",
   "version": "0.0.1",
-  "publisher": "local",
-  "license": "UNLICENSED",
+  "publisher": "loveyu",
+  "license": "MIT",
+  "keywords": [
+    "hover",
+    "translate",
+    "translation",
+    "translator",
+    "comment",
+    "rename",
+    "pascalcase"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/loveyu233/hover-translate-replace.git"
+  },
+  "bugs": {
+    "url": "https://github.com/loveyu233/hover-translate-replace/issues"
+  },
+  "homepage": "https://github.com/loveyu233/hover-translate-replace#readme",
   "engines": {
     "vscode": "^1.90.0"
   },
