@@ -21,6 +21,10 @@
       {
         "command": "goHoverTranslate.clearCache",
         "title": "Go Hover Translate: 清空翻译缓存"
+      },
+      {
+        "command": "goHoverTranslate.toggleOriginal",
+        "title": "Go Hover Translate: 切换原文显示"
       }
     ],
     "configuration": {
@@ -35,7 +39,8 @@
           "type": "string",
           "enum": [
             "google-free",
-            "openai-compatible"
+            "openai-compatible",
+            "tencent-cloud"
           ],
           "default": "google-free",
           "description": "翻译服务提供方。"
@@ -86,6 +91,36 @@
           "type": "string",
           "default": "gpt-4o-mini",
           "description": "OpenAI 兼容接口使用的模型名。"
+        },
+        "goHoverTranslate.tencentSecretId": {
+          "type": "string",
+          "default": "",
+          "description": "腾讯云 API 的 SecretId。"
+        },
+        "goHoverTranslate.tencentSecretKey": {
+          "type": "string",
+          "default": "",
+          "description": "腾讯云 API 的 SecretKey。"
+        },
+        "goHoverTranslate.tencentRegion": {
+          "type": "string",
+          "default": "ap-beijing",
+          "description": "腾讯云机器翻译接口请求地域，例如 ap-beijing。"
+        },
+        "goHoverTranslate.tencentProjectId": {
+          "type": "number",
+          "default": 0,
+          "description": "腾讯云机器翻译项目 ID，默认 0。"
+        },
+        "goHoverTranslate.tencentSourceLanguage": {
+          "type": "string",
+          "default": "auto",
+          "description": "腾讯云机器翻译源语言，默认 auto。"
+        },
+        "goHoverTranslate.tencentEndpoint": {
+          "type": "string",
+          "default": "https://tmt.tencentcloudapi.com",
+          "description": "腾讯云机器翻译接口地址。"
         },
         "goHoverTranslate.title": {
           "type": "string",

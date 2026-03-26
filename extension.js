@@ -1,19 +1,36 @@
+const fs = require("fs/promises");
 const http = require("http");
 const https = require("https");
+const crypto = require("crypto");
+const path = require("path");
 const vscode = require("vscode");
 
 const translationCache = new Map();
+const expandedOriginalSet = new Set();
+const persistentCache = {
+  filePath: path.join(__dirname, ".cache", "translation-cache.json"),
+  loadPromise: null,
+  writeTimer: null,
+  writePromise: Promise.resolve(),
+  maxEntries: 2000,
+};
 
 function activate(context) {
+  void ensurePersistentCacheLoaded();
+
   context.subscriptions.push(
     vscode.languages.registerHoverProvider({ language: "go", scheme: "file" }, {
       provideHover(document, position, token) {
         return provideTranslatedHover(document, position, token);
       },
     }),
-    vscode.commands.registerCommand("goHoverTranslate.clearCache", () => {
+    vscode.commands.registerCommand("goHoverTranslate.clearCache", async () => {
       translationCache.clear();
+      await flushPersistentCache(true);
       vscode.window.showInformationMessage("Go 悬浮翻译缓存已清空。");
+    }),
+    vscode.commands.registerCommand("goHoverTranslate.toggleOriginal", async (payload) => {
+      await toggleOriginal(payload);
     })
   );
 }
@@ -24,36 +41,48 @@ async function provideTranslatedHover(document, position, token) {
     return null;
   }
 
-  const comment = await readDefinitionComment(document, position, token, config.maxChars);
-  if (!comment) {
+  const definitionInfo = await readDefinitionComment(document, position, token, config.maxChars);
+  if (!definitionInfo || !definitionInfo.comment) {
     return null;
   }
+  const { comment, hoverKey } = definitionInfo;
+  const sourceMatchesTarget = config.skipIfSourceMatchesTarget &&
+    looksLikeTargetLanguage(comment, config.targetLanguage);
 
-  if (config.skipIfSourceMatchesTarget && looksLikeTargetLanguage(comment, config.targetLanguage)) {
-    return null;
-  }
+  const displayText = sourceMatchesTarget
+    ? cleanTranslatedText(comment, config.targetLanguage)
+    : cleanTranslatedText(await translateWithCache(comment, config, token), config.targetLanguage);
 
-  const translated = await translateWithCache(comment, config, token);
-  if (!translated) {
-    return null;
-  }
-  const cleaned = cleanTranslatedText(translated, config.targetLanguage);
-  if (!cleaned) {
+  if (!displayText) {
     return null;
   }
 
   const markdown = new vscode.MarkdownString();
-  markdown.isTrusted = false;
+  markdown.isTrusted = {
+    enabledCommands: ["goHoverTranslate.toggleOriginal"],
+  };
   markdown.supportHtml = false;
 
   if (config.title) {
     markdown.appendMarkdown(`**${escapeMarkdown(config.title)}**\n\n`);
   }
-  markdown.appendText(cleaned);
+  markdown.appendText(displayText);
 
-  if (config.includeOriginal) {
+  const shouldShowOriginal = !sourceMatchesTarget &&
+    (config.includeOriginal || expandedOriginalSet.has(hoverKey));
+  if (shouldShowOriginal) {
     markdown.appendMarkdown("\n\n---\n\n");
     markdown.appendText(comment.trim());
+  }
+
+  if (!sourceMatchesTarget) {
+    const toggleUri = buildToggleCommandUri({
+      hoverKey,
+      sourceUri: document.uri.toString(),
+      line: position.line,
+      character: position.character,
+    });
+    markdown.appendMarkdown(`\n\n[${shouldShowOriginal ? "隐藏原文" : "显示原文"}](${toggleUri})`);
   }
 
   return new vscode.Hover(markdown);
@@ -73,6 +102,12 @@ function getConfig() {
     openaiBaseUrl: config.get("openaiBaseUrl", "https://api.openai.com/v1"),
     openaiApiKey: config.get("openaiApiKey", ""),
     openaiModel: config.get("openaiModel", "gpt-4o-mini"),
+    tencentSecretId: config.get("tencentSecretId", ""),
+    tencentSecretKey: config.get("tencentSecretKey", ""),
+    tencentRegion: config.get("tencentRegion", "ap-beijing"),
+    tencentProjectId: config.get("tencentProjectId", 0),
+    tencentSourceLanguage: config.get("tencentSourceLanguage", "auto"),
+    tencentEndpoint: config.get("tencentEndpoint", "https://tmt.tencentcloudapi.com"),
     title: config.get("title", "译文"),
   };
 }
@@ -102,7 +137,10 @@ async function readDefinitionComment(document, position, token, maxChars) {
       continue;
     }
 
-    return normalizeComment(comment, maxChars);
+    return {
+      comment: normalizeComment(comment, maxChars),
+      hoverKey: buildHoverKey(targetUri, targetRange.start),
+    };
   }
 
   return null;
@@ -177,11 +215,17 @@ function normalizeComment(comment, maxChars) {
 
 function looksLikeTargetLanguage(text, targetLanguage) {
   const lang = String(targetLanguage || "").toLowerCase();
-  const cjkCount = (text.match(/[\u3400-\u9fff]/g) || []).length;
-  const latinCount = (text.match(/[A-Za-z]/g) || []).length;
+  const normalizedText = String(text || "");
+  const cjkCount = (normalizedText.match(/[\u3400-\u9fff]/g) || []).length;
+  const latinCount = (normalizedText.match(/[A-Za-z]/g) || []).length;
+  const strippedForLanguageCheck = normalizedText
+    .replace(/`[^`\n]+`/g, " ")
+    .replace(/\[[^\]\n]+\]\([^)]+\)/g, " ")
+    .replace(/\b[A-Za-z_][A-Za-z0-9_.:/-]{2,}\b/g, " ");
+  const strippedLatinCount = (strippedForLanguageCheck.match(/[A-Za-z]/g) || []).length;
 
   if (lang.startsWith("zh")) {
-    return cjkCount > 0 && cjkCount >= latinCount;
+    return cjkCount >= 6 || (cjkCount > 0 && cjkCount >= strippedLatinCount);
   }
   if (lang.startsWith("en")) {
     return latinCount > 0 && latinCount > cjkCount * 2;
@@ -221,7 +265,47 @@ function cleanTranslatedText(text, targetLanguage) {
   return cleaned.trim();
 }
 
+function buildHoverKey(uri, position) {
+  return `${uri.toString()}#${position.line}:${position.character}`;
+}
+
+function buildToggleCommandUri(payload) {
+  const encoded = encodeURIComponent(JSON.stringify([payload]));
+  return `command:goHoverTranslate.toggleOriginal?${encoded}`;
+}
+
+async function toggleOriginal(payload) {
+  if (!payload || !payload.hoverKey) {
+    return;
+  }
+
+  if (expandedOriginalSet.has(payload.hoverKey)) {
+    expandedOriginalSet.delete(payload.hoverKey);
+  } else {
+    expandedOriginalSet.add(payload.hoverKey);
+  }
+
+  if (!payload.sourceUri || typeof payload.line !== "number" || typeof payload.character !== "number") {
+    return;
+  }
+
+  const targetUri = vscode.Uri.parse(payload.sourceUri);
+  const document = await vscode.workspace.openTextDocument(targetUri);
+  const editor = await vscode.window.showTextDocument(document, {
+    preview: false,
+    preserveFocus: true,
+  });
+  const position = new vscode.Position(payload.line, payload.character);
+  const selection = new vscode.Selection(position, position);
+  editor.selection = selection;
+  editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+
+  await vscode.commands.executeCommand("editor.action.showHover");
+}
+
 async function translateWithCache(text, config, token) {
+  await ensurePersistentCacheLoaded();
+
   const cacheKey = JSON.stringify({
     provider: config.provider,
     targetLanguage: config.targetLanguage,
@@ -229,7 +313,9 @@ async function translateWithCache(text, config, token) {
   });
 
   if (translationCache.has(cacheKey)) {
-    return translationCache.get(cacheKey);
+    const cached = translationCache.get(cacheKey);
+    touchCacheEntry(cacheKey, cached);
+    return cached;
   }
 
   if (token.isCancellationRequested) {
@@ -242,11 +328,15 @@ async function translateWithCache(text, config, token) {
     return null;
   }
 
-  translationCache.set(cacheKey, normalized);
+  touchCacheEntry(cacheKey, normalized);
+  schedulePersistentCacheFlush();
   return normalized;
 }
 
 async function translateText(text, config) {
+  if (config.provider === "tencent-cloud") {
+    return translateWithTencentCloud(text, config);
+  }
   if (config.provider === "openai-compatible") {
     return translateWithOpenAICompatible(text, config);
   }
@@ -320,6 +410,86 @@ async function translateWithOpenAICompatible(text, config) {
   return content.trim();
 }
 
+async function translateWithTencentCloud(text, config) {
+  if (!config.tencentSecretId || !config.tencentSecretKey) {
+    throw new Error("未配置 goHoverTranslate.tencentSecretId 或 goHoverTranslate.tencentSecretKey。");
+  }
+
+  const endpoint = new URL(config.tencentEndpoint);
+  const service = "tmt";
+  const host = endpoint.host;
+  const action = "TextTranslate";
+  const version = "2018-03-21";
+  const timestamp = Math.floor(Date.now() / 1000);
+  const date = formatTencentDate(timestamp);
+  const payload = {
+    SourceText: text,
+    Source: mapTencentLanguageCode(config.tencentSourceLanguage || "auto"),
+    Target: mapTencentLanguageCode(config.targetLanguage),
+    ProjectId: Number.isFinite(config.tencentProjectId) ? config.tencentProjectId : 0,
+  };
+  const requestBody = JSON.stringify(payload);
+  const contentType = "application/json; charset=utf-8";
+  const canonicalHeaders =
+    `content-type:${contentType}\n` +
+    `host:${host}\n` +
+    `x-tc-action:${action.toLowerCase()}\n`;
+  const signedHeaders = "content-type;host;x-tc-action";
+  const hashedRequestPayload = sha256Hex(requestBody);
+  const canonicalRequest = [
+    "POST",
+    "/",
+    "",
+    canonicalHeaders,
+    signedHeaders,
+    hashedRequestPayload,
+  ].join("\n");
+  const credentialScope = `${date}/${service}/tc3_request`;
+  const stringToSign = [
+    "TC3-HMAC-SHA256",
+    String(timestamp),
+    credentialScope,
+    sha256Hex(canonicalRequest),
+  ].join("\n");
+  const secretDate = hmacSha256Buffer(`TC3${config.tencentSecretKey}`, date);
+  const secretService = hmacSha256Buffer(secretDate, service);
+  const secretSigning = hmacSha256Buffer(secretService, "tc3_request");
+  const signature = hmacSha256Hex(secretSigning, stringToSign);
+  const authorization =
+    `TC3-HMAC-SHA256 Credential=${config.tencentSecretId}/${credentialScope}, ` +
+    `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const response = await requestJson(endpoint, {
+    method: "POST",
+    timeoutMs: config.timeoutMs,
+    headers: {
+      Authorization: authorization,
+      "Content-Type": contentType,
+      Host: host,
+      "X-TC-Action": action,
+      "X-TC-Version": version,
+      "X-TC-Timestamp": String(timestamp),
+      "X-TC-Region": config.tencentRegion,
+    },
+    body: requestBody,
+  });
+
+  if (response && response.Response && response.Response.Error) {
+    const error = response.Response.Error;
+    throw new Error(`${error.Code || "TencentCloudError"}: ${error.Message || "请求失败"}`);
+  }
+
+  const translatedText = response &&
+    response.Response &&
+    typeof response.Response.TargetText === "string" &&
+    response.Response.TargetText;
+  if (!translatedText) {
+    throw new Error("腾讯云机器翻译未返回有效译文。");
+  }
+
+  return translatedText.trim();
+}
+
 function requestJson(url, options) {
   const parsedUrl = typeof url === "string" ? new URL(url) : url;
   const transport = parsedUrl.protocol === "http:" ? http : https;
@@ -366,11 +536,185 @@ function ensureTrailingSlash(baseUrl) {
   return String(baseUrl).endsWith("/") ? baseUrl : `${baseUrl}/`;
 }
 
+function mapTencentLanguageCode(language) {
+  const normalized = String(language || "").trim();
+  const lower = normalized.toLowerCase();
+  const mapping = {
+    "auto": "auto",
+    "zh": "zh",
+    "zh-cn": "zh",
+    "zh-hans": "zh",
+    "zh-sg": "zh",
+    "zh-tw": "zh-TW",
+    "zh-hant": "zh-TW",
+    "en": "en",
+    "ja": "ja",
+    "ko": "ko",
+    "fr": "fr",
+    "es": "es",
+    "it": "it",
+    "de": "de",
+    "tr": "tr",
+    "ru": "ru",
+    "pt": "pt",
+    "vi": "vi",
+    "id": "id",
+    "th": "th",
+    "ms": "ms",
+    "ar": "ar",
+    "hi": "hi",
+  };
+
+  return mapping[lower] || normalized || "auto";
+}
+
+function formatTencentDate(timestamp) {
+  return new Date(timestamp * 1000).toISOString().slice(0, 10);
+}
+
+function sha256Hex(content) {
+  return crypto.createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+function hmacSha256Buffer(key, content) {
+  return crypto.createHmac("sha256", key).update(content, "utf8").digest();
+}
+
+function hmacSha256Hex(key, content) {
+  return crypto.createHmac("sha256", key).update(content, "utf8").digest("hex");
+}
+
+async function ensurePersistentCacheLoaded() {
+  if (persistentCache.loadPromise) {
+    return persistentCache.loadPromise;
+  }
+
+  persistentCache.loadPromise = (async () => {
+    try {
+      await fs.mkdir(path.dirname(persistentCache.filePath), { recursive: true });
+      const raw = await fs.readFile(persistentCache.filePath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.entries)) {
+        return;
+      }
+
+      for (const entry of parsed.entries) {
+        if (!Array.isArray(entry) || entry.length !== 2) {
+          continue;
+        }
+        const [key, value] = entry;
+        if (typeof key !== "string" || typeof value !== "string" || !value.trim()) {
+          continue;
+        }
+        translationCache.set(key, value);
+      }
+
+      removeSourceLanguageEntriesFromCache();
+      trimPersistentCache();
+    } catch (error) {
+      if (error && error.code === "ENOENT") {
+        return;
+      }
+      console.warn("[go-hover-translate] 加载持久化缓存失败:", error);
+    }
+  })();
+
+  return persistentCache.loadPromise;
+}
+
+function touchCacheEntry(key, value) {
+  if (translationCache.has(key)) {
+    translationCache.delete(key);
+  }
+  translationCache.set(key, value);
+  trimPersistentCache();
+}
+
+function trimPersistentCache() {
+  while (translationCache.size > persistentCache.maxEntries) {
+    const oldestKey = translationCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    translationCache.delete(oldestKey);
+  }
+}
+
+function removeSourceLanguageEntriesFromCache() {
+  for (const [key, value] of Array.from(translationCache.entries())) {
+    try {
+      const parsedKey = JSON.parse(key);
+      if (!parsedKey || typeof parsedKey !== "object") {
+        continue;
+      }
+
+      const text = typeof parsedKey.text === "string" ? parsedKey.text : "";
+      const targetLanguage = typeof parsedKey.targetLanguage === "string" ? parsedKey.targetLanguage : "";
+      if (!text || !targetLanguage) {
+        continue;
+      }
+
+      if (looksLikeTargetLanguage(text, targetLanguage) && String(value || "").trim() === text.trim()) {
+        translationCache.delete(key);
+      }
+    } catch {
+      continue;
+    }
+  }
+}
+
+function schedulePersistentCacheFlush() {
+  if (persistentCache.writeTimer) {
+    clearTimeout(persistentCache.writeTimer);
+  }
+
+  persistentCache.writeTimer = setTimeout(() => {
+    persistentCache.writeTimer = null;
+    void flushPersistentCache(false);
+  }, 500);
+}
+
+async function flushPersistentCache(force) {
+  await ensurePersistentCacheLoaded();
+
+  if (persistentCache.writeTimer) {
+    clearTimeout(persistentCache.writeTimer);
+    persistentCache.writeTimer = null;
+  }
+
+  const payload = force
+    ? {
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        entries: [],
+      }
+    : {
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        entries: Array.from(translationCache.entries()),
+      };
+
+  persistentCache.writePromise = persistentCache.writePromise
+    .catch(() => {})
+    .then(async () => {
+      try {
+        await fs.mkdir(path.dirname(persistentCache.filePath), { recursive: true });
+        await fs.writeFile(persistentCache.filePath, JSON.stringify(payload, null, 2), "utf8");
+      } catch (error) {
+        console.warn("[go-hover-translate] 写入持久化缓存失败:", error);
+      }
+    });
+
+  return persistentCache.writePromise;
+}
+
 function escapeMarkdown(text) {
   return String(text).replace(/([\\`*_{}\[\]()#+\-.!])/g, "\\$1");
 }
 
-function deactivate() {}
+function deactivate() {
+  return flushPersistentCache(false);
+}
 
 module.exports = {
   activate,
