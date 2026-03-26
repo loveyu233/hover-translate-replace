@@ -13,7 +13,14 @@
     "Programming Languages"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onLanguage:go",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescriptreact",
+    "onLanguage:java",
+    "onLanguage:python",
+    "onLanguage:rust"
   ],
   "main": "./extension.js",
   "contributes": {

@@ -7,6 +7,16 @@ const vscode = require("vscode");
 
 const translationCache = new Map();
 const expandedOriginalSet = new Set();
+const hoverLanguageIds = [
+  "go",
+  "javascript",
+  "typescript",
+  "javascriptreact",
+  "typescriptreact",
+  "java",
+  "python",
+  "rust",
+];
 const persistentCache = {
   filePath: path.join(__dirname, ".cache", "translation-cache.json"),
   loadPromise: null,
@@ -19,11 +29,14 @@ function activate(context) {
   void ensurePersistentCacheLoaded();
 
   context.subscriptions.push(
-    vscode.languages.registerHoverProvider({ language: "go", scheme: "file" }, {
+    vscode.languages.registerHoverProvider(
+      hoverLanguageIds.map((language) => ({ language, scheme: "file" })),
+      {
       provideHover(document, position, token) {
         return provideTranslatedHover(document, position, token);
       },
-    }),
+      }
+    ),
     vscode.commands.registerCommand("hoverTranslateReplace.clearCache", async () => {
       translationCache.clear();
       await flushPersistentCache(true);
@@ -153,6 +166,17 @@ async function readDefinitionComment(document, position, token, maxChars) {
 }
 
 function extractDocComment(document, declarationLine) {
+  const languageId = document.languageId;
+  if (languageId === "python") {
+    return extractPythonDocComment(document, declarationLine);
+  }
+  if (languageId === "rust") {
+    return extractRustDocComment(document, declarationLine);
+  }
+  return extractSlashOrBlockComment(document, declarationLine);
+}
+
+function extractSlashOrBlockComment(document, declarationLine) {
   if (declarationLine <= 0) {
     return "";
   }
@@ -205,6 +229,136 @@ function extractDocComment(document, declarationLine) {
   }
 
   return "";
+}
+
+function extractRustDocComment(document, declarationLine) {
+  if (declarationLine <= 0) {
+    return "";
+  }
+
+  const lines = [];
+  for (let line = declarationLine - 1; line >= 0; line -= 1) {
+    const text = document.lineAt(line).text.trim();
+    if (text.startsWith("///")) {
+      lines.push(text.replace(/^\/\/\/\s?/, ""));
+      continue;
+    }
+    if (text.startsWith("//!")) {
+      lines.push(text.replace(/^\/\/!\s?/, ""));
+      continue;
+    }
+    if (text.startsWith("//")) {
+      break;
+    }
+    if (text === "") {
+      break;
+    }
+    break;
+  }
+
+  if (lines.length > 0) {
+    return lines.reverse().join("\n").trim();
+  }
+
+  return extractSlashOrBlockComment(document, declarationLine);
+}
+
+function extractPythonDocComment(document, declarationLine) {
+  const hashComment = extractPythonHashComment(document, declarationLine);
+  if (hashComment) {
+    return hashComment;
+  }
+
+  return extractPythonDocstring(document, declarationLine);
+}
+
+function extractPythonHashComment(document, declarationLine) {
+  if (declarationLine <= 0) {
+    return "";
+  }
+
+  const lines = [];
+  for (let line = declarationLine - 1; line >= 0; line -= 1) {
+    const text = document.lineAt(line).text.trim();
+    if (text.startsWith("#")) {
+      lines.push(text.replace(/^#\s?/, ""));
+      continue;
+    }
+    if (text === "") {
+      break;
+    }
+    break;
+  }
+
+  return lines.length > 0 ? lines.reverse().join("\n").trim() : "";
+}
+
+function extractPythonDocstring(document, declarationLine) {
+  const declarationIndent = getIndentLevel(document.lineAt(declarationLine).text);
+  let line = declarationLine + 1;
+  while (line < document.lineCount) {
+    const rawText = document.lineAt(line).text;
+    const trimmed = rawText.trim();
+
+    if (trimmed === "") {
+      line += 1;
+      continue;
+    }
+
+    const indent = getIndentLevel(rawText);
+    if (indent <= declarationIndent) {
+      return "";
+    }
+
+    if (!trimmed.startsWith(`"""`) && !trimmed.startsWith(`'''`)) {
+      return "";
+    }
+
+    return readPythonTripleQuotedString(document, line);
+  }
+
+  return "";
+}
+
+function readPythonTripleQuotedString(document, startLine) {
+  const firstLine = document.lineAt(startLine).text;
+  const trimmed = firstLine.trim();
+  const quote = trimmed.startsWith(`"""`) ? `"""` : trimmed.startsWith(`'''`) ? `'''` : "";
+  if (!quote) {
+    return "";
+  }
+
+  const startIndex = firstLine.indexOf(quote);
+  const afterStart = firstLine.slice(startIndex + 3);
+  const sameLineEnd = afterStart.indexOf(quote);
+  if (sameLineEnd >= 0) {
+    return afterStart.slice(0, sameLineEnd).trim();
+  }
+
+  const lines = [];
+  if (afterStart.trim()) {
+    lines.push(afterStart.trimEnd());
+  }
+
+  for (let line = startLine + 1; line < document.lineCount; line += 1) {
+    const text = document.lineAt(line).text;
+    const endIndex = text.indexOf(quote);
+    if (endIndex >= 0) {
+      const beforeEnd = text.slice(0, endIndex).trimEnd();
+      if (beforeEnd) {
+        lines.push(beforeEnd);
+      }
+      return lines.join("\n").trim();
+    }
+    lines.push(text.trimEnd());
+  }
+
+  return "";
+}
+
+function getIndentLevel(text) {
+  const match = String(text || "").match(/^\s*/);
+  return match ? match[0].length : 0;
 }
 
 function normalizeComment(comment, maxChars) {
