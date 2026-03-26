@@ -2,7 +2,7 @@
   "name": "hover-translate-replace",
   "displayName": "Hover Translate Replace",
   "description": "为悬浮提示补充翻译结果，并提供常用文本替换能力。",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "loveyu",
   "license": "MIT",
   "keywords": [
