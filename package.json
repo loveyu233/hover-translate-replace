@@ -1,0 +1,98 @@
+{
+  "name": "go-hover-translate-replace",
+  "displayName": "Go Hover Translate Replace",
+  "description": "为 Go 悬浮提示补充仅翻译后的文档内容。",
+  "version": "0.0.1",
+  "publisher": "local",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:go"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "goHoverTranslate.clearCache",
+        "title": "Go Hover Translate: 清空翻译缓存"
+      }
+    ],
+    "configuration": {
+      "title": "Go Hover Translate Replace",
+      "properties": {
+        "goHoverTranslate.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否启用 Go 悬浮翻译。"
+        },
+        "goHoverTranslate.provider": {
+          "type": "string",
+          "enum": [
+            "google-free",
+            "openai-compatible"
+          ],
+          "default": "google-free",
+          "description": "翻译服务提供方。"
+        },
+        "goHoverTranslate.targetLanguage": {
+          "type": "string",
+          "default": "zh-CN",
+          "description": "目标语言，例如 zh-CN、en、ja。"
+        },
+        "goHoverTranslate.includeOriginal": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否在译文下方附带原文。"
+        },
+        "goHoverTranslate.skipIfSourceMatchesTarget": {
+          "type": "boolean",
+          "default": true,
+          "description": "当注释看起来已经是目标语言时，直接不显示额外译文。"
+        },
+        "goHoverTranslate.maxChars": {
+          "type": "number",
+          "default": 2500,
+          "minimum": 200,
+          "description": "单次翻译的最大字符数，超出后会截断。"
+        },
+        "goHoverTranslate.timeoutMs": {
+          "type": "number",
+          "default": 8000,
+          "minimum": 1000,
+          "description": "翻译请求超时时间，单位毫秒。"
+        },
+        "goHoverTranslate.googleApiUrl": {
+          "type": "string",
+          "default": "https://translate.googleapis.com/translate_a/single",
+          "description": "google-free 模式使用的翻译接口地址。"
+        },
+        "goHoverTranslate.openaiBaseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "OpenAI 兼容接口的基础地址。"
+        },
+        "goHoverTranslate.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI 兼容接口的 API Key。"
+        },
+        "goHoverTranslate.openaiModel": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "OpenAI 兼容接口使用的模型名。"
+        },
+        "goHoverTranslate.title": {
+          "type": "string",
+          "default": "译文",
+          "description": "悬浮框中译文区域的标题。设为空可不显示标题。"
+        }
+      }
+    }
+  }
+}
