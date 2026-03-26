@@ -7,6 +7,7 @@ const vscode = require("vscode");
 
 const translationCache = new Map();
 const expandedOriginalSet = new Set();
+const nativeHoverExtractionSet = new Set();
 const hoverLanguageIds = [
   "go",
   "javascript",
@@ -55,6 +56,11 @@ function activate(context) {
 }
 
 async function provideTranslatedHover(document, position, token) {
+  const requestKey = buildHoverKey(document.uri, position);
+  if (nativeHoverExtractionSet.has(requestKey)) {
+    return null;
+  }
+
   const config = getConfig();
   if (!config.enabled) {
     return null;
@@ -162,7 +168,118 @@ async function readDefinitionComment(document, position, token, maxChars) {
     };
   }
 
-  return null;
+  const hoverComment = await readNativeHoverComment(document, position, maxChars);
+  if (!hoverComment) {
+    return null;
+  }
+
+  return {
+    comment: hoverComment,
+    hoverKey: buildHoverKey(document.uri, position),
+  };
+}
+
+async function readNativeHoverComment(document, position, maxChars) {
+  const requestKey = buildHoverKey(document.uri, position);
+  nativeHoverExtractionSet.add(requestKey);
+  try {
+    const hovers = await vscode.commands.executeCommand(
+      "vscode.executeHoverProvider",
+      document.uri,
+      position
+    );
+    const items = Array.isArray(hovers) ? hovers : [];
+    for (const hover of items) {
+      const text = extractTextFromHover(hover);
+      if (!text) {
+        continue;
+      }
+      const cleaned = cleanupHoverTextForTranslation(text);
+      if (!cleaned) {
+        continue;
+      }
+      return normalizeComment(cleaned, maxChars);
+    }
+  } catch (error) {
+    console.warn("[hover-translate-replace] 读取原生 hover 失败:", error);
+  } finally {
+    nativeHoverExtractionSet.delete(requestKey);
+  }
+
+  return "";
+}
+
+function extractTextFromHover(hover) {
+  if (!hover || !hover.contents) {
+    return "";
+  }
+
+  const contents = Array.isArray(hover.contents) ? hover.contents : [hover.contents];
+  const texts = contents
+    .map((item) => hoverContentItemToText(item))
+    .filter(Boolean)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return texts.join("\n\n").trim();
+}
+
+function hoverContentItemToText(item) {
+  if (!item) {
+    return "";
+  }
+  if (typeof item === "string") {
+    return item;
+  }
+  if (typeof item.value === "string") {
+    return item.value;
+  }
+  if (typeof item.language === "string" && typeof item.value === "string") {
+    return item.value;
+  }
+  return "";
+}
+
+function cleanupHoverTextForTranslation(text) {
+  const normalized = String(text || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\[([^\]\n]+)\]\([^)]+\)/g, "$1")
+    .replace(/^[-=]{3,}$/gm, " ")
+    .replace(/^\s*#+\s*/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  const lines = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const filtered = lines.filter((line, index) => {
+    if (!line) {
+      return false;
+    }
+    if (index === 0 && line.includes("::")) {
+      return false;
+    }
+    if (/^macro_rules!/.test(line)) {
+      return false;
+    }
+    if (/^fn\s+|^struct\s+|^enum\s+|^trait\s+|^class\s+|^interface\s+|^module\s+/i.test(line)) {
+      return false;
+    }
+    if (/matched arm/i.test(line)) {
+      return false;
+    }
+    return true;
+  });
+
+  return filtered.join("\n").trim();
 }
 
 function extractDocComment(document, declarationLine) {
@@ -181,14 +298,19 @@ function extractSlashOrBlockComment(document, declarationLine) {
     return "";
   }
 
-  const previousLineText = document.lineAt(declarationLine - 1).text.trim();
+  const scanStartLine = skipAnnotationLikeLines(document, declarationLine - 1);
+  if (scanStartLine < 0) {
+    return "";
+  }
+
+  const previousLineText = document.lineAt(scanStartLine).text.trim();
   if (!previousLineText) {
     return "";
   }
 
   if (previousLineText.startsWith("//")) {
     const lines = [];
-    for (let line = declarationLine - 1; line >= 0; line -= 1) {
+    for (let line = scanStartLine; line >= 0; line -= 1) {
       const text = document.lineAt(line).text.trim();
       if (!text.startsWith("//")) {
         break;
@@ -201,7 +323,7 @@ function extractSlashOrBlockComment(document, declarationLine) {
   if (previousLineText.endsWith("*/")) {
     const lines = [];
     let foundStart = false;
-    for (let line = declarationLine - 1; line >= 0; line -= 1) {
+    for (let line = scanStartLine; line >= 0; line -= 1) {
       const text = document.lineAt(line).text;
       lines.push(text);
       if (text.includes("/*")) {
@@ -231,13 +353,52 @@ function extractSlashOrBlockComment(document, declarationLine) {
   return "";
 }
 
+function skipAnnotationLikeLines(document, startLine) {
+  let line = startLine;
+  while (line >= 0) {
+    const text = document.lineAt(line).text.trim();
+    if (text === "") {
+      line -= 1;
+      continue;
+    }
+    if (isAnnotationLikeLine(text, document.languageId)) {
+      line -= 1;
+      continue;
+    }
+    break;
+  }
+  return line;
+}
+
+function isAnnotationLikeLine(text, languageId) {
+  if (!text) {
+    return false;
+  }
+
+  if (languageId === "rust") {
+    return text.startsWith("#[");
+  }
+
+  if (languageId === "java" || languageId === "javascript" || languageId === "typescript" ||
+      languageId === "javascriptreact" || languageId === "typescriptreact") {
+    return text.startsWith("@");
+  }
+
+  return false;
+}
+
 function extractRustDocComment(document, declarationLine) {
   if (declarationLine <= 0) {
     return "";
   }
 
+  const scanStartLine = skipAnnotationLikeLines(document, declarationLine - 1);
+  if (scanStartLine < 0) {
+    return "";
+  }
+
   const lines = [];
-  for (let line = declarationLine - 1; line >= 0; line -= 1) {
+  for (let line = scanStartLine; line >= 0; line -= 1) {
     const text = document.lineAt(line).text.trim();
     if (text.startsWith("///")) {
       lines.push(text.replace(/^\/\/\/\s?/, ""));
