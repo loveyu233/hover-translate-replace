@@ -1,5 +1,18 @@
 {
   "version": 1,
-  "updatedAt": "2026-03-26T07:05:42.013Z",
-  "entries": []
+  "updatedAt": "2026-03-26T07:18:48.978Z",
+  "entries": [
+    [
+      "{\"provider\":\"tencent-cloud\",\"targetLanguage\":\"zh-CN\",\"sourceLanguage\":\"en\",\"text\":\"Left must be smaller than right\"}",
+      "左必须小于右"
+    ],
+    [
+      "{\"provider\":\"tencent-cloud\",\"targetLanguage\":\"en\",\"sourceLanguage\":\"zh\",\"text\":\"左必须小于右\"}",
+      "Left must be smaller than right"
+    ],
+    [
+      "{\"provider\":\"tencent-cloud\",\"targetLanguage\":\"zh-CN\",\"sourceLanguage\":null,\"text\":\"NewSource returns a new pseudo-random [Source] seeded with the given value.\\nUnlike the default [Source] used by top-level functions, this source is not\\nsafe for concurrent use by multiple goroutines.\\nThe returned [Source] implements [Source64].\"}",
+      "NewSource返回用给定值种子的新伪随机[Source]。\n与顶级函数使用的默认[Source]不同，此源不是\n可供多个goroutine同时使用。\n返回的[Source]实现[Source 64]。"
+    ]
+  ]
 }

@@ -31,6 +31,9 @@ function activate(context) {
     }),
     vscode.commands.registerCommand("goHoverTranslate.toggleOriginal", async (payload) => {
       await toggleOriginal(payload);
+    }),
+    vscode.commands.registerCommand("goHoverTranslate.replaceSelectionBidirectional", async () => {
+      await replaceSelectionBidirectional();
     })
   );
 }
@@ -303,12 +306,96 @@ async function toggleOriginal(payload) {
   await vscode.commands.executeCommand("editor.action.showHover");
 }
 
-async function translateWithCache(text, config, token) {
+async function replaceSelectionBidirectional() {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    return;
+  }
+
+  const selection = editor.selection;
+  if (!selection || selection.isEmpty) {
+    vscode.window.showInformationMessage("请先选中一段文本。");
+    return;
+  }
+
+  const selectedText = editor.document.getText(selection).trim();
+  if (!selectedText) {
+    vscode.window.showInformationMessage("选中文本为空，无法替换。");
+    return;
+  }
+
+  const direction = detectBidirectionalReplacement(selectedText);
+  if (!direction) {
+    vscode.window.showInformationMessage("当前仅支持中英双向替换。");
+    return;
+  }
+
+  const config = getConfig();
+  let translated;
+  try {
+    translated = await translateWithCache(
+      selectedText,
+      config,
+      undefined,
+      {
+        sourceLanguage: direction.sourceLanguage,
+        targetLanguage: direction.targetLanguage,
+      }
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`替换失败: ${error.message}`);
+    return;
+  }
+
+  if (!translated || translated.trim() === selectedText) {
+    vscode.window.showInformationMessage("没有得到可替换的译文。");
+    return;
+  }
+
+  const normalized = direction.targetLanguage.startsWith("zh")
+    ? cleanTranslatedText(translated, direction.targetLanguage)
+    : translated.trim();
+
+  const applied = await editor.edit((editBuilder) => {
+    editBuilder.replace(selection, normalized);
+  });
+
+  if (!applied) {
+    vscode.window.showErrorMessage("替换失败，编辑器未能应用修改。");
+  }
+}
+
+function detectBidirectionalReplacement(text) {
+  const normalized = String(text || "").trim();
+  const hasCjk = /[\u3400-\u9fff]/.test(normalized);
+  const hasLatin = /[A-Za-z]/.test(normalized);
+
+  if (hasCjk) {
+    return {
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+    };
+  }
+
+  if (hasLatin) {
+    return {
+      sourceLanguage: "en",
+      targetLanguage: "zh-CN",
+    };
+  }
+
+  return null;
+}
+
+async function translateWithCache(text, config, token, overrides = {}) {
   await ensurePersistentCacheLoaded();
 
+  const targetLanguage = overrides.targetLanguage || config.targetLanguage;
+  const sourceLanguage = overrides.sourceLanguage || null;
   const cacheKey = JSON.stringify({
     provider: config.provider,
-    targetLanguage: config.targetLanguage,
+    targetLanguage,
+    sourceLanguage,
     text,
   });
 
@@ -318,11 +405,14 @@ async function translateWithCache(text, config, token) {
     return cached;
   }
 
-  if (token.isCancellationRequested) {
+  if (token && token.isCancellationRequested) {
     return null;
   }
 
-  const translated = await translateText(text, config);
+  const translated = await translateText(text, config, {
+    targetLanguage,
+    sourceLanguage,
+  });
   const normalized = typeof translated === "string" ? translated.trim() : "";
   if (!normalized) {
     return null;
@@ -333,21 +423,21 @@ async function translateWithCache(text, config, token) {
   return normalized;
 }
 
-async function translateText(text, config) {
+async function translateText(text, config, overrides = {}) {
   if (config.provider === "tencent-cloud") {
-    return translateWithTencentCloud(text, config);
+    return translateWithTencentCloud(text, config, overrides);
   }
   if (config.provider === "openai-compatible") {
-    return translateWithOpenAICompatible(text, config);
+    return translateWithOpenAICompatible(text, config, overrides);
   }
-  return translateWithGoogleFree(text, config);
+  return translateWithGoogleFree(text, config, overrides);
 }
 
-async function translateWithGoogleFree(text, config) {
+async function translateWithGoogleFree(text, config, overrides = {}) {
   const url = new URL(config.googleApiUrl);
   url.searchParams.set("client", "gtx");
-  url.searchParams.set("sl", "auto");
-  url.searchParams.set("tl", config.targetLanguage);
+  url.searchParams.set("sl", overrides.sourceLanguage || "auto");
+  url.searchParams.set("tl", overrides.targetLanguage || config.targetLanguage);
   url.searchParams.set("dt", "t");
   url.searchParams.set("q", text);
 
@@ -366,7 +456,7 @@ async function translateWithGoogleFree(text, config) {
     .trim();
 }
 
-async function translateWithOpenAICompatible(text, config) {
+async function translateWithOpenAICompatible(text, config, overrides = {}) {
   if (!config.openaiApiKey) {
     throw new Error("未配置 goHoverTranslate.openaiApiKey。");
   }
@@ -378,7 +468,9 @@ async function translateWithOpenAICompatible(text, config) {
     messages: [
       {
         role: "system",
-        content: `你是专业技术翻译，请把 Go 注释准确翻译成 ${config.targetLanguage}，只返回译文，不要解释。`,
+        content:
+          `你是专业技术翻译。请把输入文本准确翻译成 ${overrides.targetLanguage || config.targetLanguage}。` +
+          `如果已知源语言是 ${overrides.sourceLanguage || "auto"}，请据此翻译。只返回译文，不要解释。`,
       },
       {
         role: "user",
@@ -410,7 +502,7 @@ async function translateWithOpenAICompatible(text, config) {
   return content.trim();
 }
 
-async function translateWithTencentCloud(text, config) {
+async function translateWithTencentCloud(text, config, overrides = {}) {
   if (!config.tencentSecretId || !config.tencentSecretKey) {
     throw new Error("未配置 goHoverTranslate.tencentSecretId 或 goHoverTranslate.tencentSecretKey。");
   }
@@ -424,8 +516,8 @@ async function translateWithTencentCloud(text, config) {
   const date = formatTencentDate(timestamp);
   const payload = {
     SourceText: text,
-    Source: mapTencentLanguageCode(config.tencentSourceLanguage || "auto"),
-    Target: mapTencentLanguageCode(config.targetLanguage),
+    Source: mapTencentLanguageCode(overrides.sourceLanguage || config.tencentSourceLanguage || "auto"),
+    Target: mapTencentLanguageCode(overrides.targetLanguage || config.targetLanguage),
     ProjectId: Number.isFinite(config.tencentProjectId) ? config.tencentProjectId : 0,
   };
   const requestBody = JSON.stringify(payload);

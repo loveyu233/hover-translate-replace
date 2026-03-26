@@ -97,8 +97,20 @@ ln -s /Users/huangzhenyu/Other/vscode_extensions/go-hover-translate-replace \
 
 ## 命令
 
-- `Go Hover Translate: 清空翻译缓存`
-- `Go Hover Translate: 切换原文显示`
+- `清空翻译缓存`
+- `切换原文显示`
+- `中英互译替换`
+
+## 右键替换
+
+在编辑器里双击或手动选中一段文本后，右键可以看到 `中英互译替换`。
+
+规则是：
+
+- 选中中文：替换为英文
+- 选中英文：替换为中文
+
+这项功能会复用当前配置的翻译源和缓存。
 
 ## 腾讯云配置示例
 

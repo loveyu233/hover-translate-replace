@@ -20,13 +20,26 @@
     "commands": [
       {
         "command": "goHoverTranslate.clearCache",
-        "title": "Go Hover Translate: 清空翻译缓存"
+        "title": "清空翻译缓存"
       },
       {
         "command": "goHoverTranslate.toggleOriginal",
-        "title": "Go Hover Translate: 切换原文显示"
+        "title": "切换原文显示"
+      },
+      {
+        "command": "goHoverTranslate.replaceSelectionBidirectional",
+        "title": "中英互译替换"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "goHoverTranslate.replaceSelectionBidirectional",
+          "when": "editorHasSelection",
+          "group": "1_modification@99"
+        }
+      ]
+    },
     "configuration": {
       "title": "Go Hover Translate Replace",
       "properties": {
