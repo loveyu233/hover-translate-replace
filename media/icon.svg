@@ -1,0 +1,54 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="128" y1="120" x2="920" y2="940" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#13242C"/>
+      <stop offset="1" stop-color="#091116"/>
+    </linearGradient>
+    <radialGradient id="bgLight" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(752 208) rotate(132.961) scale(830 704)">
+      <stop stop-color="#20414C" stop-opacity="0.72"/>
+      <stop offset="1" stop-color="#20414C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bubble" x1="238" y1="276" x2="792" y2="758" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A7CA2"/>
+      <stop offset="0.55" stop-color="#1EBFB8"/>
+      <stop offset="1" stop-color="#6DE5F0"/>
+    </linearGradient>
+    <linearGradient id="bubbleStroke" x1="266" y1="242" x2="788" y2="754" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9AFCFF" stop-opacity="0.72"/>
+      <stop offset="1" stop-color="#F0FFFF" stop-opacity="0.24"/>
+    </linearGradient>
+    <filter id="bubbleShadow" x="142" y="198" width="762" height="690" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="28"/>
+      <feGaussianBlur stdDeviation="36"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0117647 0 0 0 0 0.0941176 0 0 0 0 0.129412 0 0 0 0.32 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_2"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_2" result="shape"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="228" fill="url(#bgLight)"/>
+
+  <g opacity="0.18">
+    <path d="M184 304H324" stroke="#84F7FF" stroke-width="18" stroke-linecap="round"/>
+    <path d="M184 362H296" stroke="#84F7FF" stroke-width="18" stroke-linecap="round"/>
+    <path d="M184 420H314" stroke="#84F7FF" stroke-width="18" stroke-linecap="round"/>
+    <path d="M702 748H840" stroke="#84F7FF" stroke-width="18" stroke-linecap="round"/>
+    <path d="M732 808H840" stroke="#84F7FF" stroke-width="18" stroke-linecap="round"/>
+  </g>
+
+  <g filter="url(#bubbleShadow)">
+    <path d="M260 304C260 271.967 285.967 246 318 246H704C752.601 246 792 285.399 792 334V586C792 634.601 752.601 674 704 674H530L420 778V674H318C285.967 674 260 648.033 260 616V304Z" fill="url(#bubble)"/>
+    <path d="M318 255H704C747.63 255 783 290.37 783 334V586C783 629.63 747.63 665 704 665H521L429 742V665H318C290.937 665 269 643.063 269 616V304C269 276.937 290.937 255 318 255Z" stroke="url(#bubbleStroke)" stroke-width="18"/>
+  </g>
+
+  <circle cx="338" cy="314" r="18" fill="#DFFFFF" fill-opacity="0.46"/>
+  <circle cx="390" cy="314" r="18" fill="#DFFFFF" fill-opacity="0.32"/>
+  <circle cx="442" cy="314" r="18" fill="#DFFFFF" fill-opacity="0.2"/>
+
+  <text x="340" y="560" fill="white" font-size="246" font-weight="760" text-anchor="middle" font-family="'SF Pro Display','Helvetica Neue','Arial',sans-serif">A</text>
+  <text x="518" y="548" fill="white" font-size="184" font-weight="700" text-anchor="middle" font-family="'SF Pro Display','Helvetica Neue','Arial',sans-serif">↔</text>
+  <text x="650" y="560" fill="white" font-size="246" font-weight="700" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif">文</text>
+</svg>

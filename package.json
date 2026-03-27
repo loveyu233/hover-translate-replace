@@ -4,6 +4,7 @@
   "description": "为悬浮提示补充翻译结果，并提供常用文本替换能力。",
   "version": "0.0.3",
   "publisher": "loveyu",
+  "icon": "media/icon.png",
   "license": "MIT",
   "keywords": [
     "hover",
